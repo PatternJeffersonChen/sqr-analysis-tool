@@ -362,6 +362,7 @@ def _currency(v: float) -> str:
 
 
 def _load(f) -> pd.DataFrame:
+    """Load CSV or Excel, handling Google Ads multi-header exports."""
     name = f.name.lower()
     if name.endswith(".csv"):
         try:
@@ -370,7 +371,10 @@ def _load(f) -> pd.DataFrame:
             f.seek(0)
             return pd.read_csv(f, encoding="latin-1")
     elif name.endswith((".xlsx", ".xls")):
-        return pd.read_excel(f)
+        # Read with header=None so the engine's _normalise_columns can
+        # detect and skip Google Ads metadata rows automatically.
+        df = pd.read_excel(f, header=None)
+        return df
     raise ValueError("Upload a .csv or .xlsx file.")
 
 
@@ -405,8 +409,6 @@ with col_up:
                                 help="Google Ads > Campaigns > Insights & Reports > Search Terms",
                                 label_visibility="collapsed")
 with col_cfg:
-    target_cpa = st.number_input("Target CPA ($)", min_value=1.0, value=50.0, step=5.0,
-                                  help="Account or campaign target cost per acquisition")
     min_clicks = st.number_input("Min clicks", min_value=1, value=5, step=1,
                                   help="Queries below this threshold are categorised as Monitor")
 
@@ -432,7 +434,7 @@ if df.empty:
     st.stop()
 
 try:
-    result = analyse_sqr(df, target_cpa=target_cpa, min_clicks=min_clicks)
+    result = analyse_sqr(df, min_clicks=min_clicks)
 except ValueError as e:
     st.error(str(e))
     st.stop()

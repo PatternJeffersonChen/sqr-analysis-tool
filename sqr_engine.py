@@ -101,7 +101,7 @@ _COLUMN_ALIASES = {
     ],
     "conversions": [
         "conversions", "conv", "conv.", "total conversions", "all conv.",
-        "all conversions",
+        "all conversions", "all conv",
     ],
     "clicks": [
         "clicks", "total clicks",
@@ -111,7 +111,7 @@ _COLUMN_ALIASES = {
     ],
     "conversion_value": [
         "conversion value", "conv. value", "total conversion value",
-        "all conv. value", "revenue", "value",
+        "all conv. value", "all conv value", "revenue", "value",
     ],
     "keyword": [
         "keyword", "keyword text", "matched keyword",
@@ -122,16 +122,73 @@ _COLUMN_ALIASES = {
     "match_type": [
         "match type", "keyword match type", "search match type",
     ],
+    "ad_group": [
+        "ad group", "ad group name", "adgroup",
+    ],
     "ctr": [
         "ctr", "click-through rate", "click through rate",
     ],
+    "avg_cpc": [
+        "avg. cpc", "avg cpc", "average cpc",
+    ],
+    "conv_rate": [
+        "conv. rate", "conv rate", "conversion rate",
+    ],
+    "cost_per_conv": [
+        "cost / conv.", "cost / conv", "cost per conv.", "cost per conversion",
+        "cost/conv", "cost/conv.",
+    ],
+    "currency_code": [
+        "currency code", "currency",
+    ],
 }
+
+
+def _detect_header_row(df: pd.DataFrame) -> int:
+    """
+    Google Ads exports often have metadata rows (report title, date range)
+    before the actual column headers. Scan the first 10 rows for one that
+    looks like a header (contains known column names like 'Search term',
+    'Cost', 'Clicks', etc.).
+    """
+    known_headers = {
+        "search term", "cost", "clicks", "impressions", "impr.",
+        "conversions", "keyword", "campaign", "query", "search query",
+    }
+    for idx in range(min(10, len(df))):
+        row_values = {str(v).lower().strip() for v in df.iloc[idx] if pd.notna(v)}
+        matches = row_values & known_headers
+        if len(matches) >= 3:
+            return idx
+    return -1
 
 
 def _normalise_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Map whatever column names the user's export uses to canonical names."""
     # Strip BOM and whitespace from column names
-    df.columns = [c.strip().lstrip("\ufeff") for c in df.columns]
+    df.columns = [str(c).strip().lstrip("\ufeff") for c in df.columns]
+
+    # Check if the first column has the expected search term header;
+    # if not, the real headers might be in a data row (Google Ads metadata rows).
+    lower_first_cols = {str(c).lower().strip() for c in df.columns}
+    known_search = {"search term", "query", "search query", "search terms"}
+    if not (lower_first_cols & known_search):
+        header_idx = _detect_header_row(df)
+        if header_idx >= 0:
+            new_headers = [str(v).strip() if pd.notna(v) else f"col_{i}"
+                          for i, v in enumerate(df.iloc[header_idx])]
+            df.columns = new_headers
+            df = df.iloc[header_idx + 1:].reset_index(drop=True)
+
+    # Strip BOM/whitespace again after potential header reassignment
+    df.columns = [str(c).strip().lstrip("\ufeff") for c in df.columns]
+
+    # Filter out Google Ads summary/total rows
+    for col in df.columns:
+        if col.lower().strip() in ("search term", "search_term", "query", "search query"):
+            mask = df[col].astype(str).str.startswith("Total:")
+            df = df[~mask].reset_index(drop=True)
+            break
 
     rename_map: dict[str, str] = {}
     lower_cols = {c.lower().strip(): c for c in df.columns}
@@ -230,10 +287,24 @@ def compute_ngrams(df: pd.DataFrame, max_n: int = 3) -> pd.DataFrame:
 
 def categorise_query(
     row: pd.Series,
-    target_cpa: float,
+    account_avg_cpa: float,
     min_clicks_threshold: int = 10,
 ) -> str:
-    """Assign a query to one of the three paths."""
+    """
+    Assign a query to one of the three paths.
+
+    Instead of relying on a user-supplied target CPA, we derive thresholds
+    from the account's own average CPA (computed from the data).  This makes
+    the tool zero-config for accounts that don't track a CPA target.
+
+    Rules
+    -----
+    - < min_clicks  ->  Monitor (not enough data)
+    - 0 conversions + any spend  ->  Negative
+    - conversions >= 2 and CPA <= account_avg_cpa  ->  Growth
+    - conversions > 0  but CPA > 3x account_avg_cpa  ->  Negative (poor ROI)
+    - everything else  ->  Monitor
+    """
     cost = float(row.get("cost", 0))
     conversions = float(row.get("conversions", 0))
     clicks = int(row.get("clicks", 0))
@@ -244,14 +315,11 @@ def categorise_query(
     if conversions == 0 and cost > 0:
         return QueryPath.NEGATIVE.value
 
-    if conversions >= 3 and (cost / max(conversions, 1)) <= target_cpa:
+    if conversions >= 2 and (cost / max(conversions, 1)) <= account_avg_cpa:
         return QueryPath.GROWTH.value
 
-    if conversions > 0 and (cost / max(conversions, 1)) > target_cpa * 2:
+    if conversions > 0 and account_avg_cpa > 0 and (cost / max(conversions, 1)) > account_avg_cpa * 3:
         return QueryPath.NEGATIVE.value
-
-    if conversions > 0 and (cost / max(conversions, 1)) > target_cpa:
-        return QueryPath.MONITOR.value
 
     return QueryPath.MONITOR.value
 
@@ -302,7 +370,6 @@ def _severity_from_waste(waste: float, total_cost: float) -> Severity:
 
 def analyse_sqr(
     df: pd.DataFrame,
-    target_cpa: float,
     min_clicks: int = 5,
     min_cost_threshold: float = 10.0,
 ) -> AnalysisResult:
@@ -312,7 +379,6 @@ def analyse_sqr(
     Parameters
     ----------
     df : DataFrame with search term data (any standard Google Ads export format)
-    target_cpa : Account or campaign target CPA for categorisation thresholds
     min_clicks : Minimum clicks before a query is evaluated (noise filter)
     min_cost_threshold : Minimum cost for a query to appear in recommendations
     """
@@ -335,9 +401,14 @@ def analyse_sqr(
     total_conversions = df["conversions"].sum()
     total_queries = len(df)
 
+    # Derive account average CPA from the data itself (no user input needed)
+    account_avg_cpa = (
+        total_cost / total_conversions if total_conversions > 0 else total_cost * 0.1
+    )
+
     # Step 1: Categorise every query
     df["path"] = df.apply(
-        lambda r: categorise_query(r, target_cpa, min_clicks), axis=1
+        lambda r: categorise_query(r, account_avg_cpa, min_clicks), axis=1
     )
 
     # Step 2: Calculate wasted spend
