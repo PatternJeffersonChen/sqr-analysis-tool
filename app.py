@@ -10,6 +10,7 @@ ready to implement.
 from __future__ import annotations
 
 import io
+import traceback
 from pathlib import Path
 
 import pandas as pd
@@ -26,7 +27,7 @@ from sqr_engine import (
 )
 
 # ---------------------------------------------------------------------------
-# Page config and theme
+# Page config
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
@@ -37,272 +38,316 @@ st.set_page_config(
 )
 
 # ---------------------------------------------------------------------------
-# Pattern brand + fashion-UX CSS
+# Pattern brand CSS
 #
-# Philosophy: Helmut Lang restraint meets Swiss International precision.
-# Near-black canvas. One accent (Pattern teal). Monospace for data.
-# Generous negative space. Weight contrast for hierarchy.
+# Design philosophy: Stripe/Linear/Vercel developer aesthetic.
+# Near-black canvas (#09090B). One accent (#3ECFB4). Monospace for data.
+# Tight letter-spacing. Extreme whitespace. Borders that barely whisper.
+# Zero or 2px border-radius. Engineered, not friendly.
 # ---------------------------------------------------------------------------
 
-st.markdown("""
+_CSS = """
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
-    /* --- Foundation: near-black canvas --- */
-    .stApp, [data-testid="stAppViewContainer"] {
-        background-color: #0A0A0B;
-        color: #E8E8E8;
-    }
-    header[data-testid="stHeader"] {
-        background-color: #0A0A0B;
-    }
-    [data-testid="stSidebar"] {
-        background-color: #111113;
-        border-right: 1px solid rgba(255,255,255,0.06);
+    /* ── Foundation ── */
+    :root {
+        --bg-primary: #09090B;
+        --bg-surface: #111113;
+        --bg-elevated: #18181B;
+        --border-subtle: rgba(255,255,255,0.06);
+        --border-hover: rgba(255,255,255,0.12);
+        --text-primary: #FAFAFA;
+        --text-secondary: rgba(255,255,255,0.55);
+        --text-tertiary: rgba(255,255,255,0.30);
+        --accent: #3ECFB4;
+        --accent-muted: rgba(62,207,180,0.15);
+        --red: #F87171;
+        --orange: #FB923C;
+        --yellow: #FACC15;
+        --radius: 2px;
     }
 
-    /* --- Typography: Inter + JetBrains Mono --- */
-    html, body, [class*="css"] {
-        font-family: 'Inter', -apple-system, sans-serif;
+    /* ── Canvas ── */
+    .stApp,
+    [data-testid="stAppViewContainer"],
+    .main,
+    section[data-testid="stSidebar"],
+    [data-testid="stHeader"] {
+        background-color: var(--bg-primary) !important;
+        color: var(--text-primary) !important;
+    }
+    [data-testid="stSidebar"] {
+        border-right: 1px solid var(--border-subtle) !important;
+    }
+
+    /* ── Typography: Inter body, JetBrains data ── */
+    html, body, [class*="css"], .stMarkdown, p, span, li, label, div {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
         letter-spacing: -0.01em;
+    }
+    h1, h2, h3, h4 {
+        font-family: 'Inter', sans-serif !important;
+        color: var(--text-primary) !important;
     }
     h1 {
         font-weight: 300 !important;
-        font-size: 2.4rem !important;
-        letter-spacing: -0.03em !important;
-        color: #FFFFFF !important;
+        font-size: 2.2rem !important;
+        letter-spacing: -0.04em !important;
         margin-bottom: 0.25rem !important;
+        line-height: 1.1 !important;
     }
     h2 {
         font-weight: 600 !important;
-        font-size: 1.1rem !important;
-        letter-spacing: -0.02em !important;
-        color: #FFFFFF !important;
+        font-size: 0.85rem !important;
+        letter-spacing: 0.06em !important;
         text-transform: uppercase !important;
-        margin-top: 2.5rem !important;
-        margin-bottom: 1rem !important;
+        color: var(--text-secondary) !important;
+        margin-top: 2rem !important;
+        margin-bottom: 0.75rem !important;
     }
     h3 {
         font-weight: 500 !important;
-        font-size: 0.95rem !important;
-        letter-spacing: 0.04em !important;
+        font-size: 0.75rem !important;
+        letter-spacing: 0.08em !important;
         text-transform: uppercase !important;
-        color: rgba(255,255,255,0.5) !important;
-        margin-bottom: 0.75rem !important;
+        color: var(--text-tertiary) !important;
+        margin-bottom: 0.5rem !important;
     }
-    p, li, span, div {
-        color: #C8C8C8;
+    p, li, span {
+        color: var(--text-secondary) !important;
         line-height: 1.6;
     }
 
-    /* --- Metric cards --- */
+    /* ── Block container ── */
+    .block-container {
+        padding-top: 3rem !important;
+        padding-bottom: 3rem !important;
+        max-width: 1200px !important;
+    }
+
+    /* ── Metric cards ── */
     [data-testid="stMetric"] {
-        background: #111113;
-        border: 1px solid rgba(255,255,255,0.06);
-        border-radius: 2px;
-        padding: 1.25rem 1.5rem;
+        background: var(--bg-surface) !important;
+        border: 1px solid var(--border-subtle) !important;
+        border-radius: var(--radius) !important;
+        padding: 1.25rem 1.5rem !important;
     }
     [data-testid="stMetricLabel"] {
         font-family: 'JetBrains Mono', monospace !important;
-        font-size: 0.7rem !important;
+        font-size: 0.65rem !important;
         font-weight: 500 !important;
-        letter-spacing: 0.08em !important;
+        letter-spacing: 0.1em !important;
         text-transform: uppercase !important;
-        color: rgba(255,255,255,0.4) !important;
+        color: var(--text-tertiary) !important;
     }
     [data-testid="stMetricValue"] {
         font-family: 'Inter', sans-serif !important;
         font-weight: 300 !important;
-        font-size: 2rem !important;
-        color: #FFFFFF !important;
+        font-size: 1.8rem !important;
+        color: var(--text-primary) !important;
         letter-spacing: -0.03em !important;
     }
     [data-testid="stMetricDelta"] {
         font-family: 'JetBrains Mono', monospace !important;
-        font-size: 0.75rem !important;
+        font-size: 0.7rem !important;
     }
 
-    /* --- Tables --- */
-    [data-testid="stDataFrame"] {
-        border: 1px solid rgba(255,255,255,0.06);
-        border-radius: 2px;
+    /* ── Dataframes ── */
+    [data-testid="stDataFrame"],
+    .stDataFrame {
+        border: 1px solid var(--border-subtle) !important;
+        border-radius: var(--radius) !important;
     }
+    [data-testid="stDataFrame"] table,
     .stDataFrame table {
         font-family: 'JetBrains Mono', monospace !important;
-        font-size: 0.8rem !important;
+        font-size: 0.78rem !important;
     }
 
-    /* --- Tabs --- */
+    /* ── Tabs ── */
     [data-testid="stTabs"] [data-baseweb="tab-list"] {
-        gap: 0;
-        border-bottom: 1px solid rgba(255,255,255,0.08);
-        background: transparent;
+        gap: 0 !important;
+        border-bottom: 1px solid var(--border-subtle) !important;
+        background: transparent !important;
     }
     [data-testid="stTabs"] button[data-baseweb="tab"] {
         font-family: 'JetBrains Mono', monospace !important;
-        font-size: 0.75rem !important;
+        font-size: 0.7rem !important;
         font-weight: 500 !important;
         letter-spacing: 0.06em !important;
         text-transform: uppercase !important;
-        color: rgba(255,255,255,0.4) !important;
+        color: var(--text-tertiary) !important;
         background: transparent !important;
         border: none !important;
         border-bottom: 2px solid transparent !important;
-        padding: 0.75rem 1.5rem !important;
+        padding: 0.75rem 1.25rem !important;
         border-radius: 0 !important;
+        transition: color 0.15s ease !important;
+    }
+    [data-testid="stTabs"] button[data-baseweb="tab"]:hover {
+        color: var(--text-secondary) !important;
     }
     [data-testid="stTabs"] button[aria-selected="true"] {
-        color: #FFFFFF !important;
-        border-bottom-color: #3ECFB4 !important;
+        color: var(--text-primary) !important;
+        border-bottom-color: var(--accent) !important;
         background: transparent !important;
     }
+    /* Tab highlight bar */
+    [data-testid="stTabs"] [data-baseweb="tab-highlight"] {
+        background-color: var(--accent) !important;
+    }
 
-    /* --- Inputs --- */
-    [data-testid="stNumberInput"] input,
-    [data-testid="stTextInput"] input {
-        background: #111113 !important;
-        border: 1px solid rgba(255,255,255,0.1) !important;
-        border-radius: 2px !important;
-        color: #FFFFFF !important;
+    /* ── Inputs ── */
+    input, [data-testid="stNumberInput"] input, [data-testid="stTextInput"] input {
+        background: var(--bg-surface) !important;
+        border: 1px solid var(--border-subtle) !important;
+        border-radius: var(--radius) !important;
+        color: var(--text-primary) !important;
         font-family: 'JetBrains Mono', monospace !important;
-        font-size: 0.85rem !important;
+        font-size: 0.82rem !important;
     }
-    [data-testid="stNumberInput"] input:focus,
-    [data-testid="stTextInput"] input:focus {
-        border-color: #3ECFB4 !important;
-        box-shadow: 0 0 0 1px rgba(62,207,180,0.2) !important;
+    input:focus, [data-testid="stNumberInput"] input:focus {
+        border-color: var(--accent) !important;
+        box-shadow: 0 0 0 1px rgba(62,207,180,0.15) !important;
+    }
+    /* Number input labels */
+    [data-testid="stNumberInput"] label,
+    [data-testid="stTextInput"] label {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.7rem !important;
+        font-weight: 500 !important;
+        letter-spacing: 0.06em !important;
+        text-transform: uppercase !important;
+        color: var(--text-tertiary) !important;
     }
 
-    /* --- File uploader --- */
-    [data-testid="stFileUploader"] {
-        background: transparent;
-    }
+    /* ── File uploader ── */
     [data-testid="stFileUploader"] section {
-        background: #111113 !important;
-        border: 1px dashed rgba(255,255,255,0.12) !important;
-        border-radius: 2px !important;
-        padding: 2rem !important;
+        background: var(--bg-surface) !important;
+        border: 1px dashed rgba(255,255,255,0.10) !important;
+        border-radius: var(--radius) !important;
+        padding: 2.5rem 2rem !important;
+        transition: border-color 0.15s ease !important;
     }
     [data-testid="stFileUploader"] section:hover {
-        border-color: rgba(62,207,180,0.4) !important;
+        border-color: rgba(62,207,180,0.3) !important;
+    }
+    [data-testid="stFileUploader"] small {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.7rem !important;
+        color: var(--text-tertiary) !important;
     }
 
-    /* --- Buttons --- */
-    .stButton button, .stDownloadButton button {
-        background: #3ECFB4 !important;
-        color: #0A0A0B !important;
+    /* ── Buttons ── */
+    .stButton > button,
+    .stDownloadButton > button {
+        background: var(--accent) !important;
+        color: #09090B !important;
         border: none !important;
-        border-radius: 2px !important;
+        border-radius: var(--radius) !important;
         font-family: 'JetBrains Mono', monospace !important;
-        font-size: 0.75rem !important;
+        font-size: 0.7rem !important;
         font-weight: 600 !important;
-        letter-spacing: 0.06em !important;
+        letter-spacing: 0.08em !important;
         text-transform: uppercase !important;
         padding: 0.6rem 1.5rem !important;
         transition: opacity 0.15s ease !important;
     }
-    .stButton button:hover, .stDownloadButton button:hover {
+    .stButton > button:hover,
+    .stDownloadButton > button:hover {
         opacity: 0.85 !important;
-        background: #3ECFB4 !important;
+        background: var(--accent) !important;
+        color: #09090B !important;
     }
 
-    /* --- Expander --- */
-    [data-testid="stExpander"] {
-        background: #111113;
-        border: 1px solid rgba(255,255,255,0.06);
-        border-radius: 2px;
-    }
-    [data-testid="stExpander"] summary {
+    /* ── Multiselect ── */
+    [data-testid="stMultiSelect"] {
         font-family: 'JetBrains Mono', monospace !important;
-        font-size: 0.8rem !important;
+    }
+    [data-testid="stMultiSelect"] [data-baseweb="select"] {
+        background: var(--bg-surface) !important;
+        border-color: var(--border-subtle) !important;
+        border-radius: var(--radius) !important;
+    }
+    [data-testid="stMultiSelect"] label {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.7rem !important;
+        font-weight: 500 !important;
+        letter-spacing: 0.06em !important;
+        text-transform: uppercase !important;
+        color: var(--text-tertiary) !important;
+    }
+
+    /* ── Radio buttons ── */
+    [data-testid="stRadio"] label {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.7rem !important;
         letter-spacing: 0.04em !important;
-        color: rgba(255,255,255,0.6) !important;
     }
 
-    /* --- Alerts --- */
+    /* ── Expander ── */
+    [data-testid="stExpander"] {
+        background: var(--bg-surface) !important;
+        border: 1px solid var(--border-subtle) !important;
+        border-radius: var(--radius) !important;
+    }
+    [data-testid="stExpander"] summary,
+    [data-testid="stExpander"] summary span {
+        font-family: 'JetBrains Mono', monospace !important;
+        font-size: 0.78rem !important;
+        letter-spacing: 0.02em !important;
+        color: var(--text-secondary) !important;
+    }
+
+    /* ── Alerts ── */
     [data-testid="stAlert"] {
-        border-radius: 2px !important;
-        font-size: 0.85rem !important;
-        border: 1px solid rgba(255,255,255,0.08) !important;
+        border-radius: var(--radius) !important;
+        font-size: 0.82rem !important;
+        border: 1px solid var(--border-subtle) !important;
     }
 
-    /* --- Divider --- */
+    /* ── Divider ── */
     hr {
-        border-color: rgba(255,255,255,0.06) !important;
+        border-color: var(--border-subtle) !important;
         margin: 2rem 0 !important;
     }
 
-    /* --- Scrollbar --- */
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #0A0A0B; }
-    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg-primary); }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
 
-    /* --- Pattern logo text --- */
-    .pattern-brand {
-        font-family: 'JetBrains Mono', monospace;
-        font-size: 0.65rem;
-        font-weight: 500;
-        letter-spacing: 0.14em;
-        text-transform: uppercase;
-        color: rgba(255,255,255,0.25);
-        margin-bottom: 0.5rem;
-    }
-    .pattern-subtitle {
-        font-size: 0.9rem;
-        color: rgba(255,255,255,0.45);
-        font-weight: 300;
-        margin-bottom: 2.5rem;
-        line-height: 1.5;
-    }
-
-    /* --- Severity badges --- */
-    .badge-critical {
-        background: rgba(239,68,68,0.15); color: #F87171;
-        padding: 0.15rem 0.5rem; border-radius: 1px;
-        font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;
-        font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase;
-    }
-    .badge-high {
-        background: rgba(251,146,60,0.15); color: #FB923C;
-        padding: 0.15rem 0.5rem; border-radius: 1px;
-        font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;
-        font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase;
-    }
-    .badge-medium {
-        background: rgba(250,204,21,0.15); color: #FACC15;
-        padding: 0.15rem 0.5rem; border-radius: 1px;
-        font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;
-        font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase;
-    }
-    .badge-low {
-        background: rgba(62,207,180,0.15); color: #3ECFB4;
-        padding: 0.15rem 0.5rem; border-radius: 1px;
-        font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;
-        font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase;
-    }
-
-    /* --- Hide streamlit branding --- */
+    /* ── Hide Streamlit branding ── */
     #MainMenu, footer, [data-testid="stToolbar"] { display: none !important; }
+    header[data-testid="stHeader"] { display: none !important; }
 
-    /* --- Reduce top padding --- */
-    .block-container {
-        padding-top: 3rem !important;
-        max-width: 1100px !important;
+    /* ── Reduce default gap between elements ── */
+    .stVerticalBlock > div:has(> [data-testid="stMetric"]) {
+        gap: 0 !important;
+    }
+
+    /* ── Toast / success / warning override ── */
+    .stSuccess, .stWarning, .stError, .stInfo {
+        font-family: 'Inter', sans-serif !important;
+        font-size: 0.82rem !important;
     }
 </style>
-""", unsafe_allow_html=True)
+"""
+
+st.markdown(_CSS, unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
-# Plotly theme (consistent with Pattern dark aesthetic)
+# Plotly theme
 # ---------------------------------------------------------------------------
 
 PLOTLY_LAYOUT = dict(
-    paper_bgcolor="#0A0A0B",
-    plot_bgcolor="#0A0A0B",
-    font=dict(family="Inter, sans-serif", color="#C8C8C8", size=12),
-    margin=dict(l=0, r=0, t=32, b=0),
+    paper_bgcolor="#09090B",
+    plot_bgcolor="#09090B",
+    font=dict(family="Inter, -apple-system, sans-serif", color="#A1A1AA", size=12),
+    margin=dict(l=0, r=0, t=36, b=0),
     xaxis=dict(
         gridcolor="rgba(255,255,255,0.04)",
         zerolinecolor="rgba(255,255,255,0.06)",
@@ -321,61 +366,69 @@ SEVERITY_COLOURS = {
     Severity.LOW: "#3ECFB4",
 }
 
+PATH_COLOURS = {
+    QueryPath.NEGATIVE.value: "#F87171",
+    QueryPath.GROWTH.value: "#3ECFB4",
+    QueryPath.TARGETING.value: "#FB923C",
+    QueryPath.MONITOR.value: "rgba(255,255,255,0.15)",
+}
+
 
 # ---------------------------------------------------------------------------
-# Helper functions
+# Helpers
 # ---------------------------------------------------------------------------
-
-def severity_badge(sev: Severity) -> str:
-    css_class = f"badge-{sev.value.lower()}"
-    return f'<span class="{css_class}">{sev.value}</span>'
-
 
 def match_type_label(mt: NegativeMatchType) -> str:
-    labels = {
+    return {
         NegativeMatchType.BROAD: "Broad",
         NegativeMatchType.PHRASE: "Phrase",
         NegativeMatchType.EXACT: "Exact",
-    }
-    return labels.get(mt, str(mt.value))
+    }.get(mt, str(mt.value))
 
 
-def format_currency(val: float) -> str:
-    if val >= 1000:
+def fmt_currency(val: float) -> str:
+    if abs(val) >= 1000:
         return f"${val:,.0f}"
     return f"${val:,.2f}"
 
 
 def load_data(uploaded_file) -> pd.DataFrame:
-    """Load CSV or Excel file into a DataFrame."""
+    """Load CSV or Excel, with error handling for common issues."""
     name = uploaded_file.name.lower()
-    if name.endswith(".csv"):
-        return pd.read_csv(uploaded_file)
-    elif name.endswith((".xlsx", ".xls")):
-        return pd.read_excel(uploaded_file)
-    else:
-        raise ValueError("Unsupported file type. Upload a .csv or .xlsx file.")
+    try:
+        if name.endswith(".csv"):
+            # Try UTF-8 first, fall back to latin-1
+            try:
+                return pd.read_csv(uploaded_file)
+            except UnicodeDecodeError:
+                uploaded_file.seek(0)
+                return pd.read_csv(uploaded_file, encoding="latin-1")
+        elif name.endswith((".xlsx", ".xls")):
+            return pd.read_excel(uploaded_file)
+        else:
+            raise ValueError("Unsupported file type. Upload a .csv or .xlsx file.")
+    except Exception as e:
+        raise ValueError(f"Could not parse file: {e}")
 
 
-def build_negatives_export(result: AnalysisResult) -> pd.DataFrame:
-    """Build a clean export DataFrame of negative keyword recommendations."""
+def build_negatives_df(negatives: list) -> pd.DataFrame:
     rows = []
-    for neg in result.negatives:
+    for neg in negatives:
         rows.append({
             "Negative Keyword": neg.term,
             "Match Type": match_type_label(neg.match_type),
             "Severity": neg.severity.value,
-            "Est. Monthly Waste": neg.estimated_waste,
-            "Query Count": neg.query_count,
+            "Est. Waste": neg.estimated_waste,
+            "Queries": neg.query_count,
             "Reason": neg.reason,
             "Source": neg.source.title(),
         })
     return pd.DataFrame(rows)
 
 
-def build_growth_export(result: AnalysisResult) -> pd.DataFrame:
+def build_growth_df(candidates: list) -> pd.DataFrame:
     rows = []
-    for g in result.growth_candidates:
+    for g in candidates:
         rows.append({
             "Search Term": g.term,
             "Conversions": g.conversions,
@@ -386,43 +439,58 @@ def build_growth_export(result: AnalysisResult) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def to_csv_bytes(df: pd.DataFrame) -> bytes:
+    buf = io.BytesIO()
+    df.to_csv(buf, index=False)
+    return buf.getvalue()
+
+
 # ---------------------------------------------------------------------------
-# Application layout
+# Header
 # ---------------------------------------------------------------------------
 
-# Header
-st.markdown('<div class="pattern-brand">Pattern AI</div>', unsafe_allow_html=True)
-st.title("Search Query Analysis")
 st.markdown(
-    '<div class="pattern-subtitle">'
+    '<p style="font-family: JetBrains Mono, monospace; font-size: 0.6rem; '
+    'font-weight: 500; letter-spacing: 0.16em; text-transform: uppercase; '
+    'color: rgba(255,255,255,0.20); margin-bottom: 0.25rem;">Pattern AI</p>',
+    unsafe_allow_html=True,
+)
+st.markdown(
+    '<h1 style="font-family: Inter, sans-serif; font-weight: 300; '
+    'font-size: 2.2rem; letter-spacing: -0.04em; color: #FAFAFA; '
+    'margin-bottom: 0.25rem; line-height: 1.1;">Search Query Analysis</h1>',
+    unsafe_allow_html=True,
+)
+st.markdown(
+    '<p style="font-size: 0.88rem; color: rgba(255,255,255,0.40); '
+    'font-weight: 300; margin-bottom: 2rem; line-height: 1.6;">'
     "Upload a search terms report. Get categorised negatives, growth "
-    "candidates, and n-gram insights ready to implement."
-    "</div>",
+    "candidates, and n-gram insights ready to implement.</p>",
     unsafe_allow_html=True,
 )
 
 # ---------------------------------------------------------------------------
-# Upload + config
+# Upload + settings
 # ---------------------------------------------------------------------------
 
-col_upload, col_config = st.columns([3, 1], gap="large")
+col_upload, col_spacer, col_config = st.columns([5, 0.5, 2], gap="small")
 
 with col_upload:
     uploaded = st.file_uploader(
         "Search Terms Report",
         type=["csv", "xlsx", "xls"],
-        help="Export from Google Ads: Campaigns > Insights & Reports > Search Terms",
+        help="Google Ads > Campaigns > Insights & Reports > Search Terms",
         label_visibility="collapsed",
     )
 
 with col_config:
-    st.markdown("### Settings")
+    st.markdown("### Configuration")
     target_cpa = st.number_input(
         "Target CPA ($)",
         min_value=1.0,
         value=50.0,
         step=5.0,
-        help="Your account or campaign target cost per acquisition",
+        help="Account or campaign target cost per acquisition",
     )
     min_clicks = st.number_input(
         "Min clicks",
@@ -437,28 +505,37 @@ with col_config:
 # ---------------------------------------------------------------------------
 
 if uploaded is not None:
+    # Load
     try:
         df = load_data(uploaded)
     except Exception as e:
         st.error(f"Failed to read file: {e}")
         st.stop()
 
+    if df.empty:
+        st.warning("The uploaded file is empty.")
+        st.stop()
+
+    # Analyse
     try:
         result = analyse_sqr(df, target_cpa=target_cpa, min_clicks=min_clicks)
     except ValueError as e:
         st.error(str(e))
         st.stop()
+    except Exception as e:
+        st.error(f"Analysis failed: {e}")
+        st.stop()
 
-    # --- Escalation alerts ---
+    # ── Escalation alerts ──
     for alert in result.escalation_alerts:
         st.error(alert)
 
-    # --- KPI strip ---
+    # ── KPI strip ──
     st.markdown("---")
     k1, k2, k3, k4, k5 = st.columns(5)
     k1.metric("Total Queries", f"{result.total_queries:,}")
-    k2.metric("Total Spend", format_currency(result.total_cost))
-    k3.metric("Wasted Spend", format_currency(result.wasted_spend))
+    k2.metric("Total Spend", fmt_currency(result.total_cost))
+    k3.metric("Wasted Spend", fmt_currency(result.wasted_spend))
     k4.metric(
         "Waste %",
         f"{result.waste_percentage:.1f}%",
@@ -466,10 +543,9 @@ if uploaded is not None:
         delta_color="inverse",
     )
     k5.metric("Negatives Found", f"{len(result.negatives):,}")
-
     st.markdown("---")
 
-    # --- Main tabs ---
+    # ── Tabs ──
     tab_neg, tab_ngram, tab_growth, tab_targeting, tab_overview = st.tabs([
         "Negatives",
         "N-Gram Analysis",
@@ -478,35 +554,34 @@ if uploaded is not None:
         "Full Data",
     ])
 
-    # ===== TAB: Negatives =====
+    # ═══════ TAB: Negatives ═══════
     with tab_neg:
         if not result.negatives:
-            st.info("No negative keyword recommendations at current thresholds.")
+            pass  # Jil Sander silence
         else:
-            # Summary row
             total_recoverable = sum(n.estimated_waste for n in result.negatives)
             crit_count = sum(1 for n in result.negatives if n.severity == Severity.CRITICAL)
             high_count = sum(1 for n in result.negatives if n.severity == Severity.HIGH)
 
             s1, s2, s3, s4 = st.columns(4)
-            s1.metric("Recoverable Spend", format_currency(total_recoverable))
+            s1.metric("Recoverable Spend", fmt_currency(total_recoverable))
             s2.metric("Total Negatives", str(len(result.negatives)))
             s3.metric("Critical", str(crit_count))
             s4.metric("High", str(high_count))
 
             st.markdown("")
 
-            # Filter controls
+            # Filters
             fc1, fc2 = st.columns(2)
             with fc1:
                 severity_filter = st.multiselect(
-                    "Filter by severity",
+                    "Severity",
                     options=[s.value for s in Severity],
                     default=[s.value for s in Severity],
                 )
             with fc2:
                 source_filter = st.multiselect(
-                    "Filter by source",
+                    "Source",
                     options=["Query", "Ngram"],
                     default=["Query", "Ngram"],
                 )
@@ -517,47 +592,32 @@ if uploaded is not None:
                 and n.source.title() in source_filter
             ]
 
-            # Build display table
-            neg_export = build_negatives_export(
-                AnalysisResult(
-                    total_queries=0, total_cost=0, total_conversions=0,
-                    wasted_spend=0, waste_percentage=0,
-                    negatives=filtered,
-                )
-            )
+            neg_df = build_negatives_df(filtered)
 
-            if not neg_export.empty:
+            if not neg_df.empty:
                 st.dataframe(
-                    neg_export,
+                    neg_df,
                     use_container_width=True,
                     hide_index=True,
                     column_config={
-                        "Est. Monthly Waste": st.column_config.NumberColumn(
-                            format="$%.2f",
-                        ),
+                        "Est. Waste": st.column_config.NumberColumn(format="$%.2f"),
                     },
                 )
 
-                # Download button
-                csv_buf = io.BytesIO()
-                neg_export.to_csv(csv_buf, index=False)
                 st.download_button(
-                    "Export Negatives CSV",
-                    data=csv_buf.getvalue(),
+                    "Export Negatives",
+                    data=to_csv_bytes(neg_df),
                     file_name="sqr_negatives.csv",
                     mime="text/csv",
                 )
-            else:
-                st.info("No negatives match current filters.")
 
-    # ===== TAB: N-Gram Analysis =====
+    # ═══════ TAB: N-Gram Analysis ═══════
     with tab_ngram:
         if result.ngram_data is None or result.ngram_data.empty:
-            st.info("Not enough data for n-gram analysis.")
+            pass
         else:
             ngram_df = result.ngram_data.copy()
 
-            # N-gram type selector
             ngram_type = st.radio(
                 "N-gram size",
                 options=[1, 2, 3],
@@ -570,7 +630,7 @@ if uploaded is not None:
             if filtered_ngrams.empty:
                 st.info(f"No {ngram_type}-grams found.")
             else:
-                # Top wasters chart
+                # Top wasters
                 top_waste = filtered_ngrams[filtered_ngrams["conversions"] == 0].head(15)
                 if not top_waste.empty:
                     fig = go.Figure()
@@ -584,19 +644,39 @@ if uploaded is not None:
                     fig.update_layout(
                         **PLOTLY_LAYOUT,
                         title=dict(
-                            text=f"Top Wasted {ngram_type}-grams (0 conversions)",
-                            font=dict(size=13, color="rgba(255,255,255,0.5)"),
+                            text=f"Top wasted {ngram_type}-grams  /  0 conversions",
+                            font=dict(
+                                size=12,
+                                color="rgba(255,255,255,0.35)",
+                                family="JetBrains Mono, monospace",
+                            ),
                         ),
-                        height=max(300, len(top_waste) * 28 + 60),
-                        yaxis=dict(autorange="reversed", gridcolor="rgba(255,255,255,0.04)"),
-                        xaxis=dict(title="Cost ($)", gridcolor="rgba(255,255,255,0.04)"),
+                        height=max(280, len(top_waste) * 28 + 60),
+                        yaxis=dict(
+                            autorange="reversed",
+                            gridcolor="rgba(255,255,255,0.04)",
+                            tickfont=dict(
+                                family="JetBrains Mono, monospace",
+                                size=11,
+                                color="rgba(255,255,255,0.5)",
+                            ),
+                        ),
+                        xaxis=dict(
+                            title=dict(
+                                text="Cost ($)",
+                                font=dict(size=10, color="rgba(255,255,255,0.3)"),
+                            ),
+                            gridcolor="rgba(255,255,255,0.04)",
+                        ),
                     )
                     st.plotly_chart(fig, use_container_width=True)
 
-                # Top performers chart
-                top_perf = filtered_ngrams[filtered_ngrams["conversions"] > 0].sort_values(
-                    "conversions", ascending=False
-                ).head(15)
+                # Top performers
+                top_perf = (
+                    filtered_ngrams[filtered_ngrams["conversions"] > 0]
+                    .sort_values("conversions", ascending=False)
+                    .head(15)
+                )
                 if not top_perf.empty:
                     fig2 = go.Figure()
                     fig2.add_trace(go.Bar(
@@ -609,20 +689,41 @@ if uploaded is not None:
                     fig2.update_layout(
                         **PLOTLY_LAYOUT,
                         title=dict(
-                            text=f"Top Converting {ngram_type}-grams",
-                            font=dict(size=13, color="rgba(255,255,255,0.5)"),
+                            text=f"Top converting {ngram_type}-grams",
+                            font=dict(
+                                size=12,
+                                color="rgba(255,255,255,0.35)",
+                                family="JetBrains Mono, monospace",
+                            ),
                         ),
-                        height=max(300, len(top_perf) * 28 + 60),
-                        yaxis=dict(autorange="reversed", gridcolor="rgba(255,255,255,0.04)"),
-                        xaxis=dict(title="Conversions", gridcolor="rgba(255,255,255,0.04)"),
+                        height=max(280, len(top_perf) * 28 + 60),
+                        yaxis=dict(
+                            autorange="reversed",
+                            gridcolor="rgba(255,255,255,0.04)",
+                            tickfont=dict(
+                                family="JetBrains Mono, monospace",
+                                size=11,
+                                color="rgba(255,255,255,0.5)",
+                            ),
+                        ),
+                        xaxis=dict(
+                            title=dict(
+                                text="Conversions",
+                                font=dict(size=10, color="rgba(255,255,255,0.3)"),
+                            ),
+                            gridcolor="rgba(255,255,255,0.04)",
+                        ),
                     )
                     st.plotly_chart(fig2, use_container_width=True)
 
-                # Full n-gram table
-                with st.expander(f"Full {ngram_type}-gram data ({len(filtered_ngrams)} rows)"):
+                # Full table
+                with st.expander(f"Full {ngram_type}-gram data  /  {len(filtered_ngrams)} rows"):
                     display_cols = [
-                        "ngram", "cost", "clicks", "impressions",
-                        "conversions", "query_count", "cpa", "cvr",
+                        c for c in [
+                            "ngram", "cost", "clicks", "impressions",
+                            "conversions", "query_count", "cpa", "cvr",
+                        ]
+                        if c in filtered_ngrams.columns
                     ]
                     st.dataframe(
                         filtered_ngrams[display_cols],
@@ -635,15 +736,12 @@ if uploaded is not None:
                         },
                     )
 
-    # ===== TAB: Growth Candidates =====
+    # ═══════ TAB: Growth Candidates ═══════
     with tab_growth:
         if not result.growth_candidates:
-            st.info(
-                "No growth candidates found. Queries need 3+ conversions "
-                "below target CPA to qualify."
-            )
+            pass
         else:
-            growth_df = build_growth_export(result)
+            growth_df = build_growth_df(result.growth_candidates)
             st.dataframe(
                 growth_df,
                 use_container_width=True,
@@ -654,26 +752,28 @@ if uploaded is not None:
                 },
             )
 
-            csv_buf = io.BytesIO()
-            growth_df.to_csv(csv_buf, index=False)
             st.download_button(
                 "Export Growth Candidates",
-                data=csv_buf.getvalue(),
+                data=to_csv_bytes(growth_df),
                 file_name="sqr_growth_candidates.csv",
                 mime="text/csv",
             )
 
-    # ===== TAB: Targeting Issues =====
+    # ═══════ TAB: Targeting Issues ═══════
     with tab_targeting:
         if not result.targeting_issues:
-            if "keyword" not in (result.categorised_df.columns if result.categorised_df is not None else []):
-                st.info(
-                    "No keyword column detected in your export. "
-                    "Include the 'Keyword' column to enable targeting analysis "
-                    "and the 10% rule check."
+            has_keyword = "keyword" in (
+                result.categorised_df.columns
+                if result.categorised_df is not None
+                else []
+            )
+            if not has_keyword:
+                st.markdown(
+                    '<p style="font-size: 0.82rem; color: rgba(255,255,255,0.35);">'
+                    "Include the Keyword column in your export to enable "
+                    "targeting analysis and the 10% rule check.</p>",
+                    unsafe_allow_html=True,
                 )
-            else:
-                st.success("No targeting issues detected. All keywords are below the 10% threshold.")
         else:
             if result.ten_percent_rule_triggered:
                 st.warning(
@@ -683,50 +783,62 @@ if uploaded is not None:
                 )
 
             for issue in result.targeting_issues:
-                with st.expander(f"{issue.keyword}  -  {issue.negative_rate}% negative rate  -  ${issue.waste_amount:,.0f} waste"):
+                with st.expander(
+                    f"{issue.keyword}  -  {issue.negative_rate}% negative rate  "
+                    f"-  ${issue.waste_amount:,.0f} waste"
+                ):
                     st.markdown(issue.recommendation)
 
-    # ===== TAB: Full Data =====
+    # ═══════ TAB: Full Data ═══════
     with tab_overview:
         if result.categorised_df is not None:
             cat_df = result.categorised_df.copy()
 
-            # Path distribution chart
+            # Donut chart
             path_counts = cat_df["path"].value_counts()
-            path_colours = {
-                QueryPath.NEGATIVE.value: "#F87171",
-                QueryPath.GROWTH.value: "#3ECFB4",
-                QueryPath.TARGETING.value: "#FB923C",
-                QueryPath.MONITOR.value: "rgba(255,255,255,0.2)",
-            }
             fig3 = go.Figure(data=[go.Pie(
                 labels=path_counts.index,
                 values=path_counts.values,
-                hole=0.65,
+                hole=0.7,
                 marker=dict(
-                    colors=[path_colours.get(p, "#555") for p in path_counts.index],
-                    line=dict(color="#0A0A0B", width=2),
+                    colors=[
+                        PATH_COLOURS.get(p, "#3A3A3C")
+                        for p in path_counts.index
+                    ],
+                    line=dict(color="#09090B", width=2),
                 ),
                 textinfo="label+percent",
-                textfont=dict(size=11, family="JetBrains Mono, monospace"),
+                textfont=dict(
+                    size=11,
+                    family="JetBrains Mono, monospace",
+                    color="rgba(255,255,255,0.6)",
+                ),
+                hoverinfo="label+value+percent",
             )])
             fig3.update_layout(
                 **PLOTLY_LAYOUT,
                 title=dict(
-                    text="Query Distribution by Path",
-                    font=dict(size=13, color="rgba(255,255,255,0.5)"),
+                    text="Query distribution by path",
+                    font=dict(
+                        size=12,
+                        color="rgba(255,255,255,0.35)",
+                        family="JetBrains Mono, monospace",
+                    ),
                 ),
-                height=380,
+                height=360,
                 showlegend=False,
             )
             st.plotly_chart(fig3, use_container_width=True)
 
             # Full table
-            display_cols = [c for c in [
-                "search_term", "keyword", "campaign", "match_type",
-                "cost", "clicks", "impressions", "conversions",
-                "conversion_value", "path",
-            ] if c in cat_df.columns]
+            display_cols = [
+                c for c in [
+                    "search_term", "keyword", "campaign", "match_type",
+                    "cost", "clicks", "impressions", "conversions",
+                    "conversion_value", "path",
+                ]
+                if c in cat_df.columns
+            ]
 
             st.dataframe(
                 cat_df[display_cols].sort_values("cost", ascending=False),
@@ -739,39 +851,45 @@ if uploaded is not None:
             )
 
 else:
-    # --- Empty state (Jil Sander silence) ---
+    # ── Empty state: Jil Sander silence ──
+    st.markdown("")
     st.markdown("")
     st.markdown("")
     c1, c2, c3 = st.columns([1, 2, 1])
     with c2:
         st.markdown(
             """
-            <div style="text-align:center; padding: 4rem 0;">
-                <div style="font-size: 3rem; margin-bottom: 1.5rem; opacity: 0.15;">P</div>
-                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
-                     letter-spacing: 0.1em; text-transform: uppercase;
-                     color: rgba(255,255,255,0.25); margin-bottom: 0.75rem;">
+            <div style="text-align: center; padding: 5rem 0;">
+                <div style="font-family: 'Inter', sans-serif; font-weight: 200;
+                     font-size: 4rem; color: rgba(255,255,255,0.06);
+                     letter-spacing: -0.05em; margin-bottom: 2rem;">P</div>
+                <div style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem;
+                     font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase;
+                     color: rgba(255,255,255,0.18); margin-bottom: 1rem;">
                     Upload a search terms export
                 </div>
-                <div style="font-size: 0.85rem; color: rgba(255,255,255,0.3);
-                     line-height: 1.8; max-width: 400px; margin: 0 auto;">
-                    Google Ads > Campaigns > Insights & Reports > Search Terms<br>
-                    Export as CSV or Excel. Include cost, clicks, conversions.
+                <div style="font-size: 0.8rem; color: rgba(255,255,255,0.22);
+                     line-height: 2; max-width: 380px; margin: 0 auto;
+                     font-family: 'Inter', sans-serif; font-weight: 300;">
+                    Google Ads &rsaquo; Campaigns &rsaquo; Insights &amp; Reports &rsaquo; Search Terms<br>
+                    CSV or Excel. Include cost, clicks, conversions.
                 </div>
             </div>
             """,
             unsafe_allow_html=True,
         )
 
-# --- Footer ---
+# ── Footer ──
 st.markdown("---")
 st.markdown(
-    '<div style="text-align:center; padding: 1rem 0;">'
-    '<span class="pattern-brand">Pattern AI</span>'
-    '<span style="color:rgba(255,255,255,0.15); margin: 0 0.75rem;">|</span>'
-    '<span style="font-family: JetBrains Mono, monospace; font-size: 0.6rem; '
-    'color: rgba(255,255,255,0.15); letter-spacing: 0.06em;">'
-    "SQR Analysis Tool v1.0"
+    '<div style="text-align: center; padding: 0.75rem 0;">'
+    '<span style="font-family: JetBrains Mono, monospace; font-size: 0.55rem; '
+    'font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; '
+    'color: rgba(255,255,255,0.12);">Pattern AI</span>'
+    '<span style="color: rgba(255,255,255,0.08); margin: 0 0.75rem;">|</span>'
+    '<span style="font-family: JetBrains Mono, monospace; font-size: 0.55rem; '
+    'color: rgba(255,255,255,0.10); letter-spacing: 0.06em;">'
+    "SQR Analysis v1.0"
     "</span>"
     "</div>",
     unsafe_allow_html=True,

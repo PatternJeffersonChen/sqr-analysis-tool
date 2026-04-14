@@ -130,6 +130,9 @@ _COLUMN_ALIASES = {
 
 def _normalise_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Map whatever column names the user's export uses to canonical names."""
+    # Strip BOM and whitespace from column names
+    df.columns = [c.strip().lstrip("\ufeff") for c in df.columns]
+
     rename_map: dict[str, str] = {}
     lower_cols = {c.lower().strip(): c for c in df.columns}
 
